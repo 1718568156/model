@@ -1,0 +1,12 @@
+# Ignore model files
+*.pth
+
+# Ignore large archive files (like Docker images)
+*.tar
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore environment files
+.env

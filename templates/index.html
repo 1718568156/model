@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>CIFAR-10 图像识别</title>
+    <style>
+        /* 这里是一些简单的样式，让页面好看一点 */
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 40px; 
+            text-align: center; 
+            background-color: #f7f7f7;
+        }
+        h1 {
+            color: #333;
+        }
+        form {
+            margin-top: 20px;
+        }
+        #result {
+            margin-top: 30px;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #d9534f;
+        }
+        #preview {
+            margin-top: 20px;
+            max-width: 200px;
+            max-height: 200px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>CIFAR-10 图像类别识别器</h1>
+    <p>请上传一张图片 (飞机, 汽车, 鸟, 猫, 鹿, 狗, 青蛙, 马, 船, 卡车)</p>
+
+    <!-- 这是用户上传文件的表单 -->
+    <form id="upload-form">
+        <input type="file" id="image-file" name="image" accept="image/png, image/jpeg, image/jpg">
+        <button type="submit">开始识别</button>
+    </form>
+    
+    <!-- 这里用来显示识别结果 -->
+    <div id="result"></div>
+
+    <!-- 这里用来预览上传的图片 -->
+    <img id="preview" src="" alt="图片预览" style="display:none;"/>
+
+    <script>
+        // --- 这部分是JavaScript，负责与后端API交互 ---
+        const form = document.getElementById('upload-form');
+        const imageFile = document.getElementById('image-file');
+        const resultDiv = document.getElementById('result');
+        const previewImg = document.getElementById('preview');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault(); // 阻止表单默认的提交行为
+
+            // 检查用户是否选择了文件
+            if (!imageFile.files[0]) {
+                resultDiv.textContent = '请先选择一个图片文件！';
+                return;
+            }
+
+            resultDiv.textContent = '正在识别中，请稍候...';
+            previewImg.style.display = 'block';
+            previewImg.src = URL.createObjectURL(imageFile.files[0]); // 显示图片预览
+
+            // 创建一个 FormData 对象来打包文件
+            const formData = new FormData();
+            formData.append('image', imageFile.files[0]);
+
+            // 使用 fetch API 向我们的 /predict 接口发送 POST 请求
+            try {
+                const response = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json(); // 解析返回的 JSON 数据
+
+                // 根据返回的数据更新页面
+                if (data.predicted_class) {
+                    resultDiv.textContent = `识别结果: ${data.predicted_class}`;
+                } else {
+                    resultDiv.textContent = `发生错误: ${data.error}`;
+                }
+            } catch (error) {
+                resultDiv.textContent = '请求失败，请检查后端服务是否正常运行。';
+            }
+        });
+    </script>
+
+</body>
+</html>
