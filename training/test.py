@@ -1,145 +1,120 @@
 import torch
-import torchvision
-import torchvision.transforms as transforms
-
 import torch.nn as nn
-import torch.nn.functional as F
+import torchvision.models as models
+from torchvision.datasets import ImageFolder
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+import numpy as np # 您之前的代码环境很可能已经有numpy
+import os
+import matplotlib.pyplot as plt # 用于最后的绘图（如果需要）
+import matplotlib
+matplotlib.use('Agg') # 确保在没有图形界面的服务器上也能保存图片
 
 
+print("--- Step 1: 库导入成功 ---")
 
-class net(nn.Module):
-    def __init__(self):
-         super().__init__()
-         self.conv1=nn.Sequential(
-         nn.Conv2d(in_channels=3,out_channels=32,kernel_size=3,padding=1),
-         nn.BatchNorm2d(32),
-         nn.ReLU(inplace=True),#inplace会破坏当前层的数据，从而节省内存
-         nn.Conv2d(in_channels=32,out_channels=64,kernel_size=3,padding=1),
-         nn.BatchNorm2d(64),
-         nn.ReLU(inplace=True),
-         # 最大池化层，将尺寸减半
-         nn.MaxPool2d(kernel_size=2, stride=2)
+# ==============================================================================
+# Part 1: 加载新模型和数据
+# ==============================================================================
+MODEL_PATH = 'garbage_best_model.pth' 
+VAL_PATH = 'split_garbage_dataset/val'
 
+if not os.path.exists(MODEL_PATH) or not os.path.exists(VAL_PATH):
+    print(f"错误：找不到模型 '{MODEL_PATH}' 或验证集 '{VAL_PATH}'。")
+    exit()
 
-         )
-         self.conv_block2 = nn.Sequential(
-         # 通道数从64增加到128
-         nn.Conv2d(in_channels=64, out_channels=128, kernel_size=3, padding=1),
-         nn.BatchNorm2d(128),
-         nn.ReLU(inplace=True),
-            
-         # 保持128通道，进一步提取特征
-         nn.Conv2d(in_channels=128, out_channels=128, kernel_size=3, padding=1),
-         nn.BatchNorm2d(128),
-         nn.ReLU(inplace=True),
-            
-         # 再次最大池化，尺寸减半
-         nn.MaxPool2d(kernel_size=2, stride=2) # 尺寸: 16x16 -> 8x8
-        )
-         self.classifier = nn.Sequential(
-         nn.Flatten(),#铺平
-            # 全连接层。输入维度根据上面计算得出：128个通道 * 8x8的特征图
-         nn.Linear(128 * 8 * 8, 1024),
-         nn.ReLU(inplace=True),
-            
-            # 加入Dropout层，以50%的概率随机丢弃神经元，防止过拟合
-         nn.Dropout(0.5),
-            
-         nn.Linear(1024, 512),
-         nn.ReLU(inplace=True),
-         nn.Dropout(0.5),
-            
-            # 最终输出层，10个类别
-         nn.Linear(512, 10)
-        )
-    def forward(self, x):
-        # 定义数据流：先通过两个卷积块，再通过分类器
-        x = self.conv1(x)
-        x = self.conv_block2(x)
-        x = self.classifier(x)
-        return x
-        
-net=net()
-# 定义模型保存的路径
-PATH = './cifar_best_model.pth'
+# 动态获取类别信息
+temp_dataset = ImageFolder(root=VAL_PATH)
+NUM_CLASSES = len(temp_dataset.classes)
+CLASS_NAMES = temp_dataset.classes
 
-# 加载已保存的模型权重
-net.load_state_dict(torch.load(PATH))
+# 定义模型结构
+model = models.resnet34(pretrained=False)
+num_features = model.fc.in_features
+model.fc = nn.Linear(num_features, NUM_CLASSES)
 
-# 同样，把模型送到GPU（如果可用）
+# 加载模型权重
 device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-net.to(device)
+model.load_state_dict(torch.load(MODEL_PATH, map_location=device))
+model.to(device)
+model.eval()
 
-print(f"--- : 模型已从 {PATH} 加载，并送至 {device} ---")
+print(f"--- 模型已从 '{MODEL_PATH}' 加载，类别为: {CLASS_NAMES} ---")
 
+# 准备验证数据
+val_transforms = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+val_dataset = ImageFolder(root=VAL_PATH, transform=val_transforms)
+valloader = DataLoader(val_dataset, batch_size=32, shuffle=False, num_workers=4)
+
+print("--- Step 2: 评估数据准备完毕 ---")
 
 # ==============================================================================
-# Part 3: 准备测试数据
+# Part 2: 在验证集上进行评估 (无新依赖版)
 # ==============================================================================
-transform = transforms.Compose(
-    [transforms.ToTensor(),
-     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
+print("--- Step 3: 开始在验证集上进行评估 ---")
 
-batch_size = 64
+# 初始化用于统计的变量
+all_labels = []
+all_predictions = []
 
-testset = torchvision.datasets.CIFAR10(root='./data', train=False,
-                                       download=True, transform=transform)
-testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size,
-                                         shuffle=False, num_workers=8)
-
-classes = ('plane', 'car', 'bird', 'cat', 'deer',
-           'dog', 'frog', 'horse', 'ship', 'truck')
-
-print("--- Step 3: 测试数据准备完毕 ---")
-
-
-
-print("--- Step 4: 开始在测试集上评估 ---")
-correct = 0
-total = 0
-
-# 我们不需要计算梯度，所以用 torch.no_grad() 来提高效率
 with torch.no_grad():
-    net.eval()
-    for data in testloader:
-        images, labels = data[0].to(device), data[1].to(device)
-        
-        # 1. 运行模型进行预测
-        outputs = net(images)
-        
-        # 2. torch.max会返回最大值和它的索引。我们只需要索引（也就是预测的类别）
+    for images, labels in valloader:
+        images, labels = images.to(device), labels.to(device)
+        outputs = model(images)
         _, predicted = torch.max(outputs.data, 1)
-        
-        # 3. 统计总数和正确预测的数量
-        total += labels.size(0)
-        correct += (predicted == labels).sum().item()
+        all_labels.extend(labels.cpu().numpy())
+        all_predictions.extend(predicted.cpu().numpy())
 
-# 计算并打印总体准确率
-accuracy = 100 * correct / total
-print(f'模型在10000张测试图片上的准确率是: {accuracy:.2f} %')
+# --- Part 3.1: 计算总体准确率 ---
+correct_predictions = np.sum(np.array(all_predictions) == np.array(all_labels))
+total_samples = len(all_labels)
+accuracy = 100 * correct_predictions / total_samples
+print(f'\n模型在 {total_samples} 张验证图片上的总体准确率是: {accuracy:.2f} %')
 
 
+# --- Part 3.2: 分类别计算准确率 (和您原来代码逻辑一致) ---
+print("\n--- 分类别准确率 ---")
+# 创建一个字典来存放每个类别的预测情况
+correct_pred_per_class = {classname: 0 for classname in CLASS_NAMES}
+total_pred_per_class = {classname: 0 for classname in CLASS_NAMES}
 
-print("--- Step 5: 开始分门别类地评估 ---")
-# 准备一个字典来存放每个类别的预测情况
-correct_pred = {classname: 0 for classname in classes}
-total_pred = {classname: 0 for classname in classes}
+for label, prediction in zip(all_labels, all_predictions):
+    if label == prediction:
+        correct_pred_per_class[CLASS_NAMES[label]] += 1
+    total_pred_per_class[CLASS_NAMES[label]] += 1
 
-with torch.no_grad():
-    for data in testloader:
-        images, labels = data[0].to(device), data[1].to(device)
-        outputs = net(images)
-        _, predictions = torch.max(outputs, 1)
-        
-        # 遍历这个批次里的每一张图片
-        for label, prediction in zip(labels, predictions):
-            if label == prediction:
-                correct_pred[classes[label]] += 1
-            total_pred[classes[label]] += 1
+for classname, correct_count in correct_pred_per_class.items():
+    # 避免除以0的错误
+    total_count = total_pred_per_class[classname]
+    class_accuracy = 100 * float(correct_count) / total_count if total_count > 0 else 0
+    print(f"类别 '{classname:12s}' 的准确率是: {class_accuracy:.2f} % ({correct_count}/{total_count})")
 
-# 打印出每个类别的准确率
-for classname, correct_count in correct_pred.items():
-    accuracy = 100 * float(correct_count) / total_pred[classname]
-    print(f"类别 '{classname:5s}' 的准确率是: {accuracy:.1f} %")
 
-print("--- 评估结束! ---")
+# --- Part 3.3: 手动计算并打印混淆矩阵 (无新依赖) ---
+print("\n--- 文本版混淆矩阵 ---")
+# 初始化一个 N x N 的零矩阵，N是类别数
+confusion_matrix = np.zeros((NUM_CLASSES, NUM_CLASSES), dtype=int)
+
+for label, prediction in zip(all_labels, all_predictions):
+    confusion_matrix[label, prediction] += 1
+
+# 打印混淆矩阵
+# 打印表头 (预测标签)
+header = " " * 15 + " ".join([f"{name[:6]:>6}" for name in CLASS_NAMES])
+print(header)
+print("-" * len(header))
+
+# 打印每一行 (真实标签)
+for i, class_name in enumerate(CLASS_NAMES):
+    row_str = f"{class_name[:12]:<12s} | "
+    row_str += " ".join([f"{count:>6}" for count in confusion_matrix[i]])
+    print(row_str)
+
+print("\n说明：行代表真实标签，列代表预测标签。")
+print("例如，第一行第二列的数字表示有多少个真实的'bukehuishou'被错误地预测成了'kehuishou'。")
+
+print("\n--- 评估结束! ---")

@@ -2,97 +2,326 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>CIFAR-10 图像识别</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>智能垃圾分类</title>
+    
     <style>
-        /* 这里是一些简单的样式，让页面好看一点 */
-        body { 
+        /* 全局样式：回归简洁 */
+        body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            margin: 40px; 
-            text-align: center; 
-            background-color: #f7f7f7;
-        }
-        h1 {
+            background-color: #f0f2f5;
             color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
         }
-        form {
+
+        .container {
+            background-color: #ffffff;
+            padding: 30px 40px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+            width: 100%;
+            max-width: 550px;
+            text-align: center;
+        }
+
+        header h1 {
+            color: #1a73e8;
+            margin: 0 0 10px 0;
+            font-size: 1.8em;
+        }
+
+        header p {
+            color: #5f6368;
+            font-size: 1.1em;
+            margin-bottom: 25px;
+        }
+
+        /* 上传区域：干净的虚线框 */
+        .upload-area {
+            /* ======================================================== */
+            /* === 这就是唯一的、但最关键的修复！ ===================== */
+            /* ======================================================== */
+            display: block; /* 将其声明为块级元素，防止边框断裂 */
+            
             margin-top: 20px;
+            border: 2px dashed #a8c7fa;
+            border-radius: 10px;
+            padding: 30px;
+            position: relative;
+            transition: background-color 0.3s;
+            cursor: pointer;
         }
-        #result {
-            margin-top: 30px;
-            font-size: 1.5em;
+
+        .upload-area:hover, .upload-area.dragover {
+            background-color: #e8f0fe;
+        }
+
+        .upload-prompt {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: #4a90e2;
+        }
+        
+        .upload-prompt svg {
+             width: 50px;
+             height: 50px;
+             stroke: currentColor;
+             margin-bottom: 10px;
+        }
+
+        .upload-prompt span {
+            font-size: 1.1em;
+            font-weight: 500;
+        }
+
+        .image-preview {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            display: none;
+            justify-content: center;
+            align-items: center;
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        .image-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+            border-radius: 6px;
+        }
+
+        /* 按钮样式：简洁的蓝色按钮 */
+        .predict-button {
+            width: 100%;
+            margin-top: 25px;
+            padding: 15px 30px;
+            font-size: 1.2em;
             font-weight: bold;
-            color: #d9534f;
+            color: #fff;
+            background: linear-gradient(45deg, #4a90e2, #1a73e8);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 4px 15px rgba(26, 115, 232, 0.3);
         }
-        #preview {
-            margin-top: 20px;
-            max-width: 200px;
-            max-height: 200px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            padding: 5px;
+
+        .predict-button:disabled {
+            background: #cccccc;
+            color: #666;
+            cursor: not-allowed;
+            box-shadow: none;
+        }
+
+        .predict-button:not(:disabled):hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(26, 115, 232, 0.4);
+        }
+
+        /* 结果和错误区域：清晰的提示卡片 */
+        .result-area, .error-area {
+            margin-top: 30px;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: left;
+        }
+
+        .result-area {
+            background-color: #e6f4ea;
+            border-left: 5px solid #34a853;
+        }
+        .result-area h2 { margin-top: 0; color: #34a853; }
+        #result-text { font-size: 1.5em; font-weight: bold; color: #202124; }
+        .suggestion { margin-top: 15px; padding-top: 15px; border-top: 1px solid #cce8d4; }
+        .suggestion h3 { margin-top: 0; color: #1e8e3e; }
+        #suggestion-text { font-size: 1em; color: #3c4043; }
+
+        .error-area {
+            background-color: #fce8e6;
+            border-left: 5px solid #d93025;
+            color: #d93025;
+            font-weight: bold;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        footer {
+            margin-top: 30px;
+            color: #999;
+            font-size: 0.9em;
         }
     </style>
 </head>
 <body>
+    <div class="container">
+        <header>
+            <h1>智能垃圾分类</h1>
+            <p>上传图片，立即识别是可回收物还是不可回收物</p>
+        </header>
 
-    <h1>CIFAR-10 图像类别识别器</h1>
-    <p>请上传一张图片 (飞机, 汽车, 鸟, 猫, 鹿, 狗, 青蛙, 马, 船, 卡车)</p>
+        <main>
+            <label for="image-upload" class="upload-area" id="upload-area">
+                <input type="file" id="image-upload" accept="image/jpeg, image/png, image/jpg" hidden>
+                
+                <div class="upload-prompt" id="upload-prompt">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    <span>点击或拖拽图片到此处</span>
+                </div>
+                
+                <div id="image-preview" class="image-preview"></div>
+            </label>
 
-    <!-- 这是用户上传文件的表单 -->
-    <form id="upload-form">
-        <input type="file" id="image-file" name="image" accept="image/png, image/jpeg, image/jpg">
-        <button type="submit">开始识别</button>
-    </form>
-    
-    <!-- 这里用来显示识别结果 -->
-    <div id="result"></div>
+            <button id="predict-button" class="predict-button" disabled>开始识别</button>
 
-    <!-- 这里用来预览上传的图片 -->
-    <img id="preview" src="" alt="图片预览" style="display:none;"/>
+            <div id="result-area" class="result-area hidden">
+                <h2>识别结果</h2>
+                <p id="result-text"></p>
+                <div class="suggestion">
+                    <h3>处理建议</h3>
+                    <p id="suggestion-text"></p>
+                </div>
+            </div>
+            
+            <div id="error-area" class="error-area hidden">
+                <p id="error-text"></p>
+            </div>
+        </main>
+        
+        <footer>
+            <p>© 2025 智能垃圾分类系统</p>
+        </footer>
+    </div>
 
     <script>
-        // --- 这部分是JavaScript，负责与后端API交互 ---
-        const form = document.getElementById('upload-form');
-        const imageFile = document.getElementById('image-file');
-        const resultDiv = document.getElementById('result');
-        const previewImg = document.getElementById('preview');
+        // JavaScript功能是完整的，无需修改
+        document.addEventListener('DOMContentLoaded', () => {
+            const uploadArea = document.getElementById('upload-area');
+            const imageUpload = document.getElementById('image-upload');
+            const imagePreview = document.getElementById('image-preview');
+            const predictButton = document.getElementById('predict-button');
+            const resultArea = document.getElementById('result-area');
+            const resultText = document.getElementById('result-text');
+            const suggestionText = document.getElementById('suggestion-text');
+            const errorArea = document.getElementById('error-area');
+            const errorText = document.getElementById('error-text');
+            const uploadPrompt = document.getElementById('upload-prompt');
+            
+            let selectedFile = null;
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault(); // 阻止表单默认的提交行为
+            const suggestions = {
+                'kehuishou': '这种物品属于可回收物，请投入蓝色可回收物垃圾桶。常见的可回收物包括废纸、塑料、玻璃、金属和布料等。',
+                'bukehuishou': '这种物品属于不可回收的干垃圾（或厨余垃圾），请根据其性质投入相应垃圾桶。请注意保持环境卫生。'
+            };
 
-            // 检查用户是否选择了文件
-            if (!imageFile.files[0]) {
-                resultDiv.textContent = '请先选择一个图片文件！';
-                return;
+            imageUpload.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) { handleFile(file); }
+            });
+
+            uploadArea.addEventListener('dragover', (event) => {
+                event.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+
+            uploadArea.addEventListener('drop', (event) => {
+                event.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const file = event.dataTransfer.files[0];
+                if (file) { handleFile(file); }
+            });
+            
+            function handleFile(file) {
+                if (!['image/jpeg', 'image/png', 'image/jpg'].includes(file.type)) {
+                    showError('文件格式不支持，请使用 png, jpg, jpeg');
+                    return;
+                }
+                
+                selectedFile = file;
+                
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.innerHTML = `<img src="${e.target.result}" alt="Image preview">`;
+                    imagePreview.style.display = 'flex';
+                    uploadPrompt.style.display = 'none';
+                };
+                reader.readAsDataURL(file);
+
+                predictButton.disabled = false;
+                hideResult();
+                hideError();
             }
 
-            resultDiv.textContent = '正在识别中，请稍候...';
-            previewImg.style.display = 'block';
-            previewImg.src = URL.createObjectURL(imageFile.files[0]); // 显示图片预览
+            predictButton.addEventListener('click', async () => {
+                if (!selectedFile) return;
 
-            // 创建一个 FormData 对象来打包文件
-            const formData = new FormData();
-            formData.append('image', imageFile.files[0]);
+                const formData = new FormData();
+                formData.append('image', selectedFile);
 
-            // 使用 fetch API 向我们的 /predict 接口发送 POST 请求
-            try {
-                const response = await fetch('/predict', {
-                    method: 'POST',
-                    body: formData
-                });
-                const data = await response.json(); // 解析返回的 JSON 数据
+                predictButton.textContent = '识别中...';
+                predictButton.disabled = true;
 
-                // 根据返回的数据更新页面
-                if (data.predicted_class) {
-                    resultDiv.textContent = `识别结果: ${data.predicted_class}`;
-                } else {
-                    resultDiv.textContent = `发生错误: ${data.error}`;
+                try {
+                    const response = await fetch('/predict', {
+                        method: 'POST',
+                        body: formData,
+                    });
+                    const data = await response.json();
+                    if (response.ok) {
+                        showResult(data.predicted_class);
+                    } else {
+                        showError(data.error || '发生未知错误');
+                    }
+                } catch (err) {
+                    showError('无法连接到服务器，请检查网络连接。');
+                } finally {
+                    predictButton.textContent = '开始识别';
+                    predictButton.disabled = false;
                 }
-            } catch (error) {
-                resultDiv.textContent = '请求失败，请检查后端服务是否正常运行。';
+            });
+
+            function showResult(className) {
+                const classMap = {
+                    'kehuishou': '可回收物',
+                    'bukehuishou': '不可回收物'
+                };
+                resultText.textContent = `类别: ${classMap[className] || '未知类别'}`;
+                suggestionText.textContent = suggestions[className] || '暂无处理建议。';
+                resultArea.classList.remove('hidden');
+                hideError();
+            }
+
+            function showError(message) {
+                errorText.textContent = `错误: ${message}`;
+                errorArea.classList.remove('hidden');
+                hideResult();
+            }
+            
+            function hideResult() {
+                resultArea.classList.add('hidden');
+            }
+
+            function hideError() {
+                errorArea.classList.add('hidden');
             }
         });
     </script>
-
 </body>
 </html>

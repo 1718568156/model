@@ -10,5 +10,4 @@ __pycache__/
 
 # Ignore environment files
 .env
-# Ignore dataset folders
-training/data/
+*_dataset/
